@@ -1,0 +1,954 @@
+---
+title: "wk03-assignment"
+author: "Schyuler Lujan"
+date: "1/19/2020"
+output:
+    html_document:
+      theme: "readable"
+      toc: true
+      toc_depth: 3
+      toc_float: true
+      number_sections: true
+---
+
+```{r echo = FALSE}
+# Course: OMSBA 5210 Data Visualization
+# Purpose: Technical appendix for small project #1
+# Date: January 23, 2020
+# Author: Schyuler Lujan
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environment of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+
+```
+
+```{r}
+# Set figure size defaults for graphical EDA
+knitr::opts_chunk$set(fig.width=12, fig.height=6) 
+```
+
+# Load relevant libraries and data
+
+```{r message = FALSE, warning = FALSE}
+# Load relevant libraries
+library(tidyverse)
+library(gridExtra) # For arranging visuals into grids
+library(scales) # For modifying axis on graphs
+library(janitor)
+library(GGally)
+library(knitr)
+```
+
+```{r message = FALSE, warning = FALSE}
+# Load data
+house_df <- read.csv("qp1_data.csv")
+```
+
+# Base EDA Step 1 - Univariate and non-graphical analysis
+```{r message = FALSE, warning = FALSE}
+# Look at first 10 rows of data
+head(house_df, 10)
+```
+
+Initial observations from first 10 rows:
+
+- Create factor variable decade_built for better groupings for year built
+- Create categorical variable for "city" or "neighborhoo" for easier geographic groupings
+- Create variable "renovated" where 0 == no renovation and 1 == renovated; to look at this regardless of yr
+- Create a variable for house age, based on the year 2016 (year of data set)
+
+I will create these new variables after my initial assessment of the original data is complete.
+
+```{r message = FALSE, warning = FALSE}
+# Look at structure of data
+str(house_df)
+```
+
+Observations about structure:
+
+Total observations = `r dim(house_df)[1]`
+
+- Substantial sample size
+- Watch for smaller sample size in subsets (ie: waterfront properties)
+- Will add new factor variables for price, yr_built, and square footage
+
+```{r message = FALSE, warning = FALSE}
+# Look at descriptive statistics
+summary(house_df)
+```
+
+**Price**
+
+- Mean house price is `r mean(house_df$price)`, which is `r mean(house_df$price) - median(house_df$price)` greater than the median price of `r median(house_df$price)`
+- Price variable is skewed to the right and median will be more stable indicator of central tendency
+- Large variation in price; range =  `r max(house_df$price) - min(house_df$price)`
+
+**Bedrooms**
+
+- mean and median are about the same, with mean = `r mean(house_df$bedrooms)` and median = `r median(house_df$bedrooms)`
+- either measure is a good indicator of central tendency
+- 75% of houses sold have 4 bedrooms or less, so there is not a lot of variation in the majority of the observations
+- the range is `r max(house_df$bedrooms) - min(house_df$bedrooms)`, indicating some outliers
+- the most common number of bedrooms in a house is `r mode(house_df$bedrooms)`
+
+**Bathrooms**
+
+- the mean is slightly lower than the median, with mean = `r mean(house_df$bathrooms)` and median = `r median(house_df$bathrooms)`, although they are not substantially different
+- indicates low values in the data set, but either measure can be used to guage central tendency
+- 3rd quartile is 2.5 bathrooms, which is close to the median, so there's not too much variation in the majority of observations
+- the range of values is `r max(house_df$bathrooms) - min(house_df$bathrooms)`, so there are, again, some outliers here
+
+**Square Feet of Living Space**
+
+- the mean is slightly higher than the median, indicating high values pulling up the mean
+- median square footage is `r median(house_df$sqft_living)`
+- a large range of sizes, at `r max(house_df$sqft_living) - min(house_df$sqft_living)` square feet
+
+**Square Feet of Lot**
+
+- the median is much lower than the mean, so there are high values pulling up the mean
+- the median is a better measure of central tendency for this variable
+
+**Floors**
+
+- the mean is slightly lower than the mean, indicating lower values pulling the mean down
+- despite the wide variation in square footage, the majority of obsverations have 2 floors or less
+
+**Waterfront**
+
+- majority of houses are not on the waterfront
+
+**View**
+
+- values range from `r min(house_df$view)` to `r max(house_df$view)`
+- majority of houses do not have any kind of view
+
+**Grade**
+
+- Values ranging from `r min(house_df$grade)` to `r max(house_df$grade)`
+- Half the values are rated `r median(house_df$grade)` or less
+
+**Condition**
+
+- values ranging from `r min(house_df$condition)` to `r max(house_df$condition)`
+- mean is slightly higher than the mean, but half the values are at `r median(house_df$condition)` condition rating or less
+
+**Year Built**
+
+- years built range from `r min(house_df$yr_built)` and `r max(house_df$yr_built)`
+- interestingly, the mean and median are not too different from each other, with the median year built at `r median(house_df$yr_built)`
+- so half the houses are older, with the bottom quartile being built in 1951 or earlier
+- the third quartile is at 1997 or earlier, so it seems like there are not necessarily a lot of brand new homes (built in the last 10 years or so)
+
+**Year Renovated**
+
+- 75% of the observations have not been renovated
+- Other summary descriptions for this variable aren't as useful. Will need to do graphical analysis to better understand this variable
+
+**Zip Code**
+
+- summary statistics are not as helpful for understanding this categorical variable; will need to do graphical analysis to better understand this variable
+
+## Data Transformations
+
+Before continuing with the EDA, add a few extra variables for more clear groupings:
+
+```{r message = FALSE, warning = FALSE}
+# Create new variable 'renovated'-----------------------------------------------
+# Purposes is to have a variable showing if a house was renovated, regardless of year
+house_df <- mutate(house_df,
+                   renovated = ifelse(yr_renovated != 0, 1, 0))
+
+# Create new variable 'city'----------------------------------------------------
+# Add new variable for geographic grouping that's more intuitive / easier to see
+# Import new dataset that lists king county zip codes and their related cities
+zip <- read.csv("zipcodes.csv")
+
+# Use left outer join to add cities to house_df, joining on zip_code
+house_df <- left_join(house_df, zip, by = c("zip_code", "zip_code"))
+
+# Create new variable 'decade_built'--------------------------------------------
+# Import new data set that lists the decades ----> I realized I could have just factored. Oops.
+# Purpose is to have easier grouping by years by grouping into decades
+decades <- read.csv("decades.csv")
+
+# Use left outer join to add decades to house_df, joining on yr_built
+house_df <- left_join(house_df, decades, by = c("yr_built", "yr_built"))
+
+# Create an observation variable for easier counting / summing -----------------
+house_df <- mutate(house_df,
+                   observation = 1)
+
+# Create a new variable 'house_age'---------------------------------------------
+house_df <- mutate(house_df,
+                   house_age = 2020 - yr_built)
+```
+
+Will also factor some of the quantitative variables to get a better sense of totals by "buckets" which will be helpful in breaking down such a large data set and getting a sense of how the quantitative variables are distributed, especially given the presence of outliers. This is also good set-up for multi-variate EDA.
+
+```{r message = FALSE, warning = FALSE}
+# Create factor variables
+
+# Create factor variable price_range---------------------------------------------
+# Factor levels created based on summary statistics; 75% of observations are $645k or less
+price_range <- cut(house_df$price, 
+                   breaks = c(0, 100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000, 1000000, 8000000),
+                   labels = c("<100k", "100k-199k", "200k-299k", "300k-399k", "400k-499k", "500k-599k", "600k-699k", "700k-799k", "800k-899k", "900k-999k", "1 million+"),
+                   right = FALSE)
+
+# Create factor variable sqft_living_range---------------------------------------
+# Factor levels created based on summary statistics: 75% of observations are 2550 sq ft or less
+living_range <- cut(house_df$sqft_living,
+                    breaks = c(0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 14000),
+                    labels = c("<500", "500-999", "1,000-1,499", "1,500-1,999", "2,000-2,499", "2,500-2,999", "3,000-3,499", "3,500-3,999", "4,000-4,499", "4,500-4,999", "5,000+"),
+                    right = FALSE)
+
+# Create factor variable sqft_lot_range------------------------------------------
+# Factor levels created based on summary statistics: 75% are about 11k sq ft or less
+lot_range <- cut(house_df$sqft_lot, 
+                   breaks = c(0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 1700000),
+                   labels = c("<1,000", "1,000-1,999", "2,000-2,999", "3,000-3,999", "4,000-4,999", "5,000-5,999", "6,000-6,999", "7,000-7,999", "8,000-8,999", "9,000-9,999", "10,000-10,999", "11,000-11,999", "12,000-12,999", "13,000-13,999", "14,000-14,999", "15k+"),
+                   right = FALSE)
+
+# Create factor variable grade_grp------------------------------------------
+# Factor levels 1 - 13
+
+grade_range <- cut(house_df$grade,
+                   breaks = c(0, 2, 4, 6, 8, 10, 14),
+                   labels = c("<2", "2-3", "4-5", "6-7", "8-9", "10+"),
+                   right = FALSE)
+
+# Add new factor variables to house_df
+house_df <- mutate(house_df,
+                   price_rnge = price_range,
+                   living_rnge = living_range,
+                   lot_rnge = lot_range,
+                   grades_rnge = grade_range)
+```
+
+# Base EDA Step 2: Uni-variate graphical analysis
+
+### **Price**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for price
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = price)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = price)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- price distribution skewed to the right
+- the majority of house prices are $1,000,000 or else
+- anything above $1,000,000 are outliers
+- where are the outliers located and what other variables do they have in common?
+
+```{r message = FALSE, warning = FALSE}
+# Create bar graph for price_rnge to see counts by price range buckets
+ggplot(data = house_df,
+       mapping = aes(x = price_range)) +
+  geom_bar()
+```
+
+- For houses under 1 million, there's a large amount between 200,000 - 599,000
+- About 1,500 homes are 1 million or above
+
+### **Bedrooms**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for bedrooms
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = bedrooms)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = bedrooms)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- anything above 5 bedrooms is an outlier; majority of observations have 5 bedrooms or less
+
+### **Bathrooms**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for bathrooms
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = bathrooms)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = bathrooms)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- majority of observations have between 1 and 3 bathrooms
+- outliers are above 3.5 or 4 bathrooms
+
+### **Square Feet of Living Space**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for sqft_living
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = sqft_living)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = sqft_living)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- majority of observations are under 5,000 square feet
+- skewed to the right, indicating some outliers
+
+```{r message = FALSE, warning = FALSE}
+# Create bar graph for sqft_living_rnge, to see groupings by buckets
+ggplot(data = house_df,
+       mapping = aes(x = living_range)) +
+  geom_bar()
+```
+
+- majority of houses look to be between 1,000 - 2,999 square feet in living space
+
+### **Square Feet of Lot**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for lot square footage
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = sqft_lot)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = sqft_lot)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- Due to outliers, the histogram is difficult to read. Look at bar graph grouped by buckets.
+
+```{r message = FALSE, warning = FALSE}
+# Create bar graph for sqft_lot_rnge
+ggplot(data = house_df,
+       mapping = aes(x = lot_range)) +
+  geom_bar()
+```
+
+- there are quite a few outliers, skewing this distribution to the right
+- when we look at the distribution by buckets, we see that a fair amount (>3,000) homes are 15k+ lot size
+- but the more common lot size looks to be between 4,000 - 9,000 sq ft
+- larger lot sizes could be more expensive houses, but they could also be in rural areas
+
+### **Floors**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for number of floors
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = floors)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = floors)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- there aren't any outliers in this variable
+- majority of observations have either 1 or 2 floors
+- anything above 2 floors is more rare
+
+### **Waterfront**
+```{r message = FALSE, warning = FALSE}
+# Create bar graph for waterfront property
+ggplot(data = house_df,
+       mapping = aes(x = waterfront)) +
+  geom_bar()
+```
+
+- majority of houses in this data set are not waterfront properties
+- will likely need to be careful when drawing any conclusions about waterfront properties
+
+### **View**
+```{r message = FALSE, warning = FALSE}
+# Create bar graph for view
+ggplot(data = house_df,
+       mapping = aes(x = view)) +
+  geom_bar()
+```
+
+- majority of houses do not have any kind of view
+- will need to be careful when making conclusions about houses with views, since there are so few
+
+### **Grade**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for bedrooms
+# grid.arrange( #use grid arrange to stack the graphs
+# ggplot(data = house_df,
+#        mapping = aes(x = 1,
+#                      y = bedrooms)) +
+#   geom_boxplot() +
+#   coord_flip(),
+# 
+# ggplot(data = house_df,
+#        mapping = aes(x = bedrooms)) +
+#   geom_histogram(),
+# 
+# ncol = 1) # specify 1 column for grid arrange
+
+ggplot(data = house_df,
+       mapping = aes(x = grade)) +
+  geom_bar()
+
+house_df %>% 
+  group_by(grade) %>% 
+  mutate(observation_num = 1) %>% 
+  summarise(sum(observation_num))
+```
+
+- majority of houses are grade 7
+- seems fairly normally distributed
+
+### **Condition**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for conditon
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = condition)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = condition)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- most are condition 3, with one outlier that's much lower, rated at `r min(house_df$condition)`
+
+### **Year Built**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for yr_built
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = yr_built)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = yr_built)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- majority of houses built before the late 1990s
+
+### **Year Renovated**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for yr_renovated
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = yr_renovated)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = yr_renovated)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+```{r message = FALSE, warning = FALSE}
+# Make bar graph only for houses where yr_renovated != 0 so we can get a better sense for those homes that actually were renovated
+grid.arrange(
+house_df %>% 
+  filter(yr_renovated != 0) %>% 
+  ggplot(mapping = aes(x = 1, y = yr_renovated)) + 
+  geom_boxplot() + 
+  coord_flip(),
+
+house_df %>% 
+  filter(yr_renovated != 0) %>% 
+  ggplot(mapping = aes(x = yr_renovated)) +
+  geom_histogram(),
+
+ncol = 1)
+```
+
+- majority of houses were not renovated - this is surprising, since there are a lot of older houses in the data
+- half the renovations were done in year 2000 or later; we have half our renovations done in last 16 yrs and the other half spaning from about the 1930's to 2000
+- the year with the single most renovations was `r max(house_df$yr_renovated)`
+- do houses with more recent renovations go for higher prices?
+
+### **House Age**
+```{r message = FALSE, warning = FALSE}
+# Create boxplot and histogram for house_age
+grid.arrange( #use grid arrange to stack the graphs
+ggplot(data = house_df,
+       mapping = aes(x = 1,
+                     y = house_age)) +
+  geom_boxplot() +
+  coord_flip(),
+
+ggplot(data = house_df,
+       mapping = aes(x = house_age)) +
+  geom_histogram(),
+
+ncol = 1) # specify 1 column for grid arrange
+```
+
+- the median house age is `r median(house_df$house_age)`
+- the mean house age is `r mean(house_df$house_age)`, which is slightly higher than the median, but not extremely different
+- looks fairly evenly distributed between around 70 years to brand new homes (0 yrs), but with a spike for homes that are around 10 - 15 years old
+- 75% of houses are 65 years old or less
+
+### **Decade Built**
+```{r message = FALSE, warning = FALSE}
+# Create bar graph showing total houses by decade built, to get an easier visual distribution
+ggplot(data = house_df,
+       mapping = aes(x = decade)) +
+  geom_bar() +
+  coord_flip()
+```
+
+- houses built between 2000-2009 were the largest category by decade
+- roughly even number of houses built between the three decades from 1950 - 1999; again, homes are a bit older in the region
+- there's a decent chunk of older homes (<1940), but still pretty small when compared to other decades
+
+### **Zip Code**
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# Create bar graph for zip code
+# ggplot(data = house_df,
+#        mapping = aes(x = zip_code)) +
+#   geom_bar() +
+#   coord_flip()
+
+# There are too many zip codes to make a bar graph useful, so create a table
+# house_df %>% 
+#   group_by(zip_code) %>% 
+#   mutate(observation = 1) %>% # Create a new column for easily summing observations
+#   summarise(count = sum(observation))
+```
+
+- since there are so many zip codes, it's difficult to get useful information from either the graph or table
+- group zip codes by city to get information more easily
+
+### **City**
+
+```{r message = FALSE, warning = FALSE}
+# Create bar graph showing total houses by city, since the zip code bar graph is almost impossible to read
+ggplot(data = house_df,
+       mapping = aes(x = city)) +
+  geom_bar() +
+  coord_flip()
+
+# Create table to see totals more clearly
+house_df %>% 
+  group_by(city) %>% 
+  summarise(count = sum(observation))
+```
+
+- The vast majority of houses sold were located in the city of Seattle. This makes sense, because it's the largest city with (likely) the highest population
+- Second most popular city was Bellevue, and third most popular was Renton
+
+**QUESTIONS**
+- What characteristics have the most positive impact on price?
+- Do house prices differ significantly by zip code? If so, is due to location or other variables?
+- Do any differences by location hold when taking other variables into account?
+- Do living space sizes differ substantially by location?
+- Do grade and condition substantially impact price?
+- If a house is renovated, is the price increased relative to comparable homes?
+- Are the larger houses in specific areas, or spread throughout king county?
+- Do some cities have more newer or older houses, or is it spread evenly across the county?
+- How does the age of the house affect price?
+- What kind of houses have a higher grade?
+
+# Base EDA Step 3: Multi-variate non-graphical analysis
+
+## Step 3.1 Categorical variables only
+
+Look at total counts and/or proportions at different intersections of the city locations and the following categorical variables:
+
+- price range (factor variable)
+- square foot living space (factor variable)
+- square foot lot (factor variable)
+- decade built
+
+```{r message = FALSE, warning = FALSE}
+# City and price range
+house_df %>% 
+  tabyl(city, price_rnge) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  kable()
+
+# City and square footage of living space
+house_df %>% 
+  tabyl(city, living_rnge) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  kable()
+
+# City and decade built
+house_df %>% 
+  tabyl(city, decade) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  kable()
+
+# Decade built and renovation - counts
+house_df %>% 
+  tabyl(decade, renovated) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  kable()
+
+# Decade built and renovation - proportions on rows to see if there's a difference by age
+house_df %>% 
+  tabyl(decade, renovated) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "row") %>% 
+  kable()
+```
+
+Observations:
+
+- For price ranges, Bellevue, Kirkland, Mercer Island, and Seattle had the highest counts for homes of $1 million or more. This makes sense, because these areas are pricier.
+- By eye-balling the table, you can tell how different cities are priced and the living spaces offered
+- Note for later: a heat map by city would be helpful to quickly visualize how each city trends by price and living space square footage
+- For all decades built, the vast majority of houses sold were not renovated (even for older homes)
+- Most of the homes renovated were much older (makes sense)
+
+## Step 3.2 Quantitative variables only
+
+Look at the correlations for all quantitative variables:
+
+```{r message = FALSE, warning = FALSE}
+# Look at correlations of all quantitative variables
+house_df %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+  round(2) %>% 
+  kable()
+
+```
+
+Observations:
+
+- square footage of the living space is highly positively correlated with the number of bathrooms and bedrooms (makes sense - more footage means you can have more rooms)
+- square footage of living space also positively correlated with grade (larger home = better build quality)
+- year built moderately negatively correlated with condition (older homes more likely to be in poorer condition)
+- renovation status has weak correlations with all other quantitative variables
+
+Variables with moderate to strong correlation with price:
+- square footage of living space; cor = `r round(cor(house_df$price, house_df$sqft_living),2)`
+- grade or build quality; core = `r round(cor(house_df$price, house_df$grade),2)`
+- number of bathrooms; core = `r round(cor(house_df$price, house_df$bathrooms),2)`
+- view; core = `r round(cor(house_df$price, house_df$view),2)`
+
+Interestingly, the year built, renovation, and condition had extremely weak correlations with price. I was surprised, since house age has moderate negative correlation with grade (build quality).
+
+**It appears that original build quality and size of living space are the most important determinants of price.**
+
+# Base EDA Step 4 / Detailed EDA
+
+I am interested in looking at different intersections between variables and how that affects the median price:
+
+- median price by sqft_lot_rnge (and city?)
+- median price by decade built and renovation
+- median price by grade and condition
+
+## Step 4.1 Categorical variables only
+
+Points of interest:
+
+- the total houses sold within each price range for each city (as proportion)
+- the general age of the houses sold within each city (as proportion)
+
+```{r message = FALSE, warning = FALSE}
+# Bar graph by city, with breakdown of price ranges for each city
+house_df %>% 
+  group_by(city) %>% 
+  ggplot(mapping = aes(x = city, fill = price_rnge)) +
+  geom_bar(position = "fill") + 
+  coord_flip()
+```
+
+- can easily see that Mercer Island, Medina, and Bellevue are the most expensive cities
+- can also see least expensive areas, such as White Center, Tukwila, SeaTac, Lakeland North, and Skyway
+- interesting visual to quickly differentiate more expensive areas from more affordable ones
+
+```{r message = FALSE, warning = FALSE}
+# Bar graph by city, with breakdown of decade built by city
+house_df %>% 
+  group_by(city) %>% 
+  ggplot(mapping = aes(x = city, fill = decade)) +
+  geom_bar(position = "fill") + 
+  coord_flip()
+```
+
+- can see which cities sold more older homes versus more newer homes
+- some cities have farily even distributions between home ages, such as Auburn and Seattle
+- other cities sold more new homes, like Union Hill- Novelty Hill, Snoqualmie, and Maple Valley
+- compared with the first bar graph, some of these cities with newer builds don't necessarily have the highest prices, like Maple Valley
+
+```{r message = FALSE, warning = FALSE}
+# Bar graph by city, with breakdown of decade built by city
+house_df %>% 
+  group_by(grade) %>% 
+  ggplot(mapping = aes(x = grade, fill = decade)) +
+  geom_bar(position = "fill") + 
+  coord_flip()
+```
+
+- in general, we see that newer homes were higher grade while older homes were lower grade
+- homes built before 1950 seem to make up the majority of homes with low grades
+- cities and zip codes with more older homes will have lower quality builds
+- interestingly, Seattle is one of those cities
+
+```{r}
+# Look at distribution of grades by city
+house_df %>% 
+  group_by(city) %>% 
+  ggplot(mapping = aes(x = city, fill = grades_rnge)) +
+  geom_bar(position = "fill") + 
+  coord_flip()
+```
+
+- It looks like pretty much every city has good grade scores. Pricier areas have scores at 10 or above, but the majority are between 6-9; County average is `r round(mean(house_df$grade),2)`
+
+## Step 4.2 Quantitative variables only
+
+```{r}
+# Scatterplot between price and square footage of living space
+house_df %>% 
+  ggplot(mapping = aes(x = sqft_living, y = price)) +
+  geom_point()
+```
+
+```{r}
+# Scatterplot to assess relationship between yr_built and price
+house_df %>% 
+  ggplot(mapping = aes(x = yr_built, y = price)) +
+  geom_point()
+
+# Scatterplot to assess relationship between yr_built and price when renovated == 1
+house_df %>% 
+  filter(renovated == 1) %>% 
+  ggplot(mapping = aes(x = yr_built, y = price)) +
+  geom_point()
+```
+
+- scatterplots for price and yr_built match the correlations generated earlier
+- do not see a substantial difference between renovated and not renovated
+
+```{r}
+# Median home price by decade built for homes that have been renovated
+house_df %>% 
+  filter(renovated == 1) %>% 
+  group_by(decade) %>% 
+  summarise(count = n()) # to get sample size
+
+# Homes that have been renovated
+house_df %>% 
+  filter(renovated == 1) %>% 
+  group_by(decade) %>% 
+  summarise(count = n(),
+            median_price = median(price))
+
+# Homes that have not been renovated
+house_df %>% 
+  filter(renovated == 0) %>% 
+  group_by(decade) %>% 
+  summarise(count = n(),
+            median_price = median(price))
+```
+
+It appears that when we compare houses by decade built, the ones with renovations have higher median prices when compared with the ones without renovations. However, the sample sizes for some decades (1980 and later) with renovations is too small to draw any substantial conclusions. Resampling for homes built in those years and renovated could be a potential task to carry out future analysis. 
+
+```{r message = FALSE, warning = FALSE}
+# Median price by city
+house_df %>% 
+  group_by(city) %>% 
+  summarise(median_price = median(price)) %>% 
+  ggplot(mapping = aes(x = city, y = median_price)) +
+  geom_col() +
+  coord_flip()
+
+```
+
+- Medina has the highest median price, followed by Mercer Island and Bellevue
+- This makes sense, given that these areas also have a lot of the $1 million+ homes
+- Seattle, which has the highest total homes sold, is more in the middle at around $500k
+
+## Step 4.3 Combining categorical and quantitative variables
+
+```{r message = FALSE, warning = FALSE}
+house_df %>% 
+  select(price, sqft_living, grade, yr_built, renovated) %>% 
+  ggpairs()
+```
+
+```{r message = FALSE, warning = FALSE}
+# Box plots showing price by decade built
+house_df %>% 
+  group_by(decade) %>% 
+  ggplot(mapping = aes(x = decade, y = price)) +
+  geom_boxplot() +
+  coord_flip()
+
+# Box plots showing price by city
+house_df %>% 
+  group_by(city) %>% 
+  ggplot(mapping = aes(x = city, y = price)) +
+  geom_boxplot() +
+  coord_flip()
+
+# Box plots showing price by grade
+house_df %>% 
+  group_by(city) %>% 
+  ggplot(mapping = aes(x = grades_rnge, y = price)) +
+  geom_boxplot() +
+  coord_flip()
+
+# Box plots showing price by square ft living space
+house_df %>% 
+  group_by(living_rnge) %>% 
+  ggplot(mapping = aes(x = living_rnge, y = price)) +
+  geom_boxplot() +
+  coord_flip()
+
+# Median price by square ft living space
+house_df %>% 
+  group_by(living_rnge) %>% 
+  summarise(mprice = median(price)) %>% 
+  ggplot(mapping = aes(x = living_rnge, y = mprice)) +
+  geom_col()+
+  coord_flip()
+
+# Renovated houses -- look at their mean grade and condition
+house_df %>% 
+  filter(yr_built < 1980,
+         renovated == 1,
+         grade >= 7) %>% 
+  group_by(decade) %>% 
+  summarise(mgrade = mean(grade),
+            mcond = mean(condition),
+            count = n())
+
+house_df %>% 
+  filter(yr_built < 1980,
+         renovated == 0,
+         condition < 3) %>% 
+  #group_by(decade) %>% 
+  summarise(count = n())
+```
+
+
+- We don't see a lot of variation in price across decade built, although median prices for homes built before 1940 appear ever so slightly higher. Regardless, price differences appear to not necessarily be due to the age of the house
+- We see a lot more variation by city, suggesting that location is more important
+- There's also a steady increase with grade, although it looks like the houses at higher grades have more variation in price due to outliers. We also saw that grade level was associated with house age. In general, it appeared that older homes had lower scores. 
+- We also see differences in price by square footage and renovation - but only for larger homes
+
+## Summary
+
+- King County houses tend to be older, in general - especially in Seattle, which has the highest volume of home sales in this data set
+- Majority of houses are not renovated
+- Not enough data for renovated houses built 1980 or later
+- House prices do not vary by age - looks roughly the same across all decades even with renovations
+- House prices vary strongly with the square footage of living space
+- There also appear to be substantial differences by city
+- House prices vary strongly with grade; higher grade = higher price
+- The impact of renovations on price is weak - square footage and grade have more impact
+
+
+# Create professional quality visuals
+
+```{r warning = FALSE, message = FALSE}
+# Set a theme for consistent formatting of graphs
+my_theme <- theme(panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "gray"),
+        axis.ticks = element_line(color = "gray"),
+        plot.title = element_text(color = "#808080", size = 16, face = "bold"),
+        plot.subtitle = element_text(color = "#808080", size = 14, face = "plain"),
+        axis.text.x = element_text(color = "#808080"),
+        axis.text.y = element_text(color = "#808080"),
+        axis.title = element_text(color = "#808080", size = 10, face = "plain"),
+        legend.title = element_text(color = "#808080", size = 12, face = "plain"),
+        legend.text = element_text(color = "#808080", size = 10, face = "plain"),
+        plot.caption = element_text(color = "#808080", size = 10, face = "plain")
+        )
+
+# Figure 1: Clustered bar graph showing median prices of homes renovated vs. not renovated
+house_df %>%
+  mutate(r_factor = ifelse(house_df$renovated == 1, "renovated", "not renovated")) %>% 
+  #filter(yr_built < 1980) %>% 
+  group_by(living_rnge, r_factor) %>% 
+  summarise(med_price = median(price)) %>% 
+  ggplot(mapping = aes(x = living_rnge, y = med_price, fill = r_factor)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  my_theme +
+  labs(title = "Larger houses see bigger gains from renovations*",
+       subtitle = "Square footage has stronger impact on price",
+       x = "Square Footage of Living Space",
+       y = "Median Sale Price ($)",
+       fill = "Renovation Status") +
+  scale_fill_manual(values = c("#d6dee1", "#002060")) +
+  scale_y_continuous(labels = scales::dollar)
+
+ggsave(filename = "figure1.png")
+
+# Figure 2: Bar graph showing percentage of homes renovated by square footage of living space
+house_df %>% 
+  mutate(r_factor = ifelse(house_df$renovated == 1, "renovated", "not renovated")) %>% 
+  #filter(yr_built < 1980) %>% 
+  group_by(decade) %>% 
+  ggplot(mapping = aes(x = decade, fill = r_factor)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  my_theme +
+  labs(title = "King County house renovations by year built*",
+       subtitle = "Majority of houses were not renovated upon sale",
+       x = "Decade Built",
+       y = "Percentage",
+       fill = "Renovation Status") +
+  scale_fill_manual(values = c("#d6dee1", "#002060")) +
+  scale_y_continuous(labels = scales::percent)
+
+ggsave(filename = "figure2.png")
+
+```
+
+
+

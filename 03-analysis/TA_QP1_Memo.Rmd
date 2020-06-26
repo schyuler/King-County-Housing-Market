@@ -1,0 +1,131 @@
+---
+output:
+  html_document:
+    theme: "readable"
+---
+---
+output: html_document
+---
+
+#### **To:** Dr. Gareth Green 
+  
+#### **From:** Schyuler Lujan 
+  
+#### **Date:** 01/24/2020
+
+#### **RE:** Insights Regarding King County Housing Market  
+
+***
+
+```{r include = FALSE}
+# Set chunk options for the file
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+```
+
+```{r include = FALSE}
+# Course: 5210 Communicating Data
+# Purpose: Illustrate how to make a html memo and import a saved project visual
+# Date: Aug 5, 2019
+# Author: Gareth Green
+
+```
+
+```{r include = FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+
+```
+
+```{r include = FALSE}
+#Load libraries
+library(tidyverse)
+
+#Load dataset
+house_df <- read.csv("qp1_data.csv")
+
+# Create new variable 'renovated'-----------------------------------------------
+# Purposes is to have a variable showing if a house was renovated, regardless of year
+house_df <- mutate(house_df,
+                   renovated = ifelse(yr_renovated != 0, 1, 0))
+
+# Create new variable 'city'----------------------------------------------------
+# Add new variable for geographic grouping that's more intuitive / easier to see
+# Import new dataset that lists king county zip codes and their related cities
+zip <- read.csv("zipcodes.csv")
+
+# Use left outer join to add cities to house_df, joining on zip_code
+house_df <- left_join(house_df, zip, by = c("zip_code", "zip_code"))
+
+# Create new variable 'decade_built'--------------------------------------------
+# Import new data set that lists the decades ----> I realized I could have just factored. Oops.
+# Purpose is to have easier grouping by years by grouping into decades
+decades <- read.csv("decades.csv")
+
+# Use left outer join to add decades to house_df, joining on yr_built
+house_df <- left_join(house_df, decades, by = c("yr_built", "yr_built"))
+
+# Create an observation variable for easier counting / summing -----------------
+house_df <- mutate(house_df,
+                   observation = 1)
+
+# Create a new variable 'house_age'---------------------------------------------
+house_df <- mutate(house_df,
+                   house_age = 2020 - yr_built)
+
+# Turn off scientific notation for memo
+options(scipen = 999)
+
+# Total houses renovated
+house_df %>% 
+  filter(yr_built < 1980,
+         renovated == 1) %>% 
+  summarise(count = n())
+
+# Median house price by square footage
+# house_df %>% 
+#   group_by(living_rnge) %>% 
+#   filter(living_rnge == "2,000-2,499") %>% 
+#   summarise(mprice = median(price))
+
+# Condition < 3
+house_df %>% 
+  filter(yr_built < 1980,
+         renovated == 0,
+         condition < 3) %>% 
+  summarise(count = n())
+
+# Grade below county average
+poor_grade <- house_df %>% 
+  filter(renovated == 0,
+         grade < 7) %>% 
+  summarise(count = n())
+```
+
+**Housing Market in King County**
+
+Population growth in the region has changed the King County housing market, with demand and prices increasing rapidly over the last 10 years. As a result, access to quality housing at reasonable prices has become more of an issue for buyers. The houses in King County are on the older side, with homes that are, on average, `r round(mean(house_df$house_age),0)` years old. In many cases in the region, houses usually need some work unless you are buying a brand new home. This can be a headache for a homeowner, but a potential business opportunity for companies looking to enter the local housing market. This memo explores the following question: "Is a business renovating homes a potentially lucrative opportunity in King County?"
+
+**Insight #1: The majority of older King County houses are not renovated**
+
+Half the houses are `r round(median(house_df$house_age),0)` years or older and the majority of homes were not renovated at the time of sale. Additionally, there were `r poor_grade` houses sold that have build qualities lower than the county average. Given that the majority of older homes have not been renovated and that there are several thousand homes with lower build quality, there appears to be a potential market.
+
+![](figure2.png){width=550px}
+
+
+**Insight #2: Square footage has the strongest impact on housing price**
+
+I initially thought a renovated house would show a substantial price increase. However I found the opposite: renovations by themselves have a weak effect on sales price. The stronger determinant of sales price is the square footage of the living space. Essentially, the larger the living space, the higher the price. In the figure below, many of the renovated houses have higher median prices than houses of a comparable size that were not renovated. We see that the larger homes have the largest price differences. Therefore, the most substantial potential gains appear to come from renovating larger houses.
+
+However, there is one important note about the 5,000+ square feet homes: this category includes homes that are substantially larger than the majority of the data set. Their size makes them more expensive in general, so it makes sense that a renovated mansion would see the largest differences in price. However, these houses may not be practical entry-points for a home renovation business.
+
+![](figure1.png){width=550px}
+
+**Summary**
+
+In conclusion, the potential gains from a home renovation business in King County comes from renovating larger houses, moreso than just renovating older ones. While renovated mansions appear to yield the highest change in sales price, these homes may not be a feasible entry point. Additionally, renovations by themselves have a weak impact on increasing house sale price. Therefore, in addition to house size, it is important to consider other characteristics such as the location and house build quality when assessing the profitability of a project. With a home that is 2,000 - 3,000 square feet, located in a city with a higher median income, a renovation could yield a substantial price increase. However, estimating how much would require additional analysis.
+
+
